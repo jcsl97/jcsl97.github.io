@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>顺职大校园导航</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #map { width: 100%; height: 100vh; }
+
+    /* 搜索栏 */
+    #search-bar {
+      position: fixed; top: 10px; left: 10px; right: 10px; z-index: 999;
+      display: flex; gap: 8px; align-items: center;
+    }
+    #search-bar input {
+      flex: 1; padding: 10px 14px; border: none; border-radius: 8px;
+      font-size: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); outline: none;
+    }
+    #search-bar select {
+      padding: 10px 8px; border: none; border-radius: 8px;
+      font-size: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); outline: none;
+      background: white; max-width: 120px;
+    }
+    #search-bar button {
+      padding: 10px 18px; border: none; border-radius: 8px;
+      background: #1677ff; color: white; font-size: 14px; font-weight: bold;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18); cursor: pointer; white-space: nowrap;
+    }
+    #search-bar button:active { background: #0958d9; }
+
+    /* 路线面板 */
+    #panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 998;
+      background: white; border-radius: 16px 16px 0 0;
+      box-shadow: 0 -2px 20px rgba(0,0,0,0.15);
+      padding: 16px; max-height: 45vh; overflow-y: auto;
+      display: none;
+    }
+    #panel.show { display: block; }
+    #panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    #panel-header h3 { font-size: 16px; color: #333; }
+    #panel-header button {
+      border: none; background: none; font-size: 20px; cursor: pointer; color: #999;
+    }
+    #route-summary {
+      font-size: 15px; color: #1677ff; font-weight: bold;
+      padding: 10px; background: #f0f5ff; border-radius: 8px; margin-bottom: 12px;
+    }
+    .step {
+      padding: 10px 0; border-bottom: 1px solid #f0f0f0;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      background: #1677ff; color: white; border-radius: 50%;
+      width: 24px; height: 24px; display: flex; align-items: center;
+      justify-content: center; font-size: 12px; flex-shrink: 0;
+    }
+    .step-info { flex: 1; }
+    .step-instruction { font-size: 14px; color: #333; line-height: 1.5; }
+    .step-meta { font-size: 12px; color: #999; margin-top: 2px; }
+
+    /* POI列表浮层 */
+    #poi-list {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 998;
+      background: white; border-radius: 16px 16px 0 0;
+      box-shadow: 0 -2px 20px rgba(0,0,0,0.15);
+      padding: 16px; max-height: 40vh; overflow-y: auto;
+      display: none;
+    }
+    #poi-list.show { display: block; }
+    #poi-list .poi-item {
+      padding: 12px 8px; border-bottom: 1px solid #f0f0f0;
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    }
+    #poi-list .poi-item:active { background: #f5f5f5; }
+    .poi-name { font-size: 15px; font-weight: 500; }
+    .poi-cat { font-size: 12px; color: #999; background: #f5f5f5; padding: 2px 8px; border-radius: 4px; }
+
+    /* 分类筛选 */
+    #cat-filter {
+      position: fixed; top: 60px; left: 10px; z-index: 997;
+      display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100vw - 20px);
+    }
+    .cat-chip {
+      padding: 4px 10px; border-radius: 14px; font-size: 12px;
+      background: white; box-shadow: 0 1px 6px rgba(0,0,0,0.12);
+      cursor: pointer; white-space: nowrap;
+    }
+    .cat-chip.active { background: #1677ff; color: white; }
+
+    @media (max-width: 600px) {
+      #search-bar { flex-wrap: wrap; }
+      #search-bar input { flex: 1 1 100%; }
+      #search-bar select { flex: 1; }
+      #search-bar button { flex: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="search-bar">
+    <input type="text" id="origin-input" placeholder="起点（如：图书馆）">
+    <input type="text" id="dest-input" placeholder="终点（如：桃苑餐厅）">
+    <button onclick="doRoute()">导航</button>
+  </div>
+
+  <div id="cat-filter"></div>
+
+  <div id="panel">
+    <div id="panel-header">
+      <h3>路线指引</h3>
+      <button onclick="closePanel()">&times;</button>
+    </div>
+    <div id="route-summary"></div>
+    <div id="steps"></div>
+  </div>
+
+  <div id="poi-list">
+    <div id="panel-header">
+      <h3>地点列表</h3>
+      <button onclick="closePOIList()">&times;</button>
+    </div>
+    <div id="poi-items"></div>
+  </div>
+
+  <script src="https://webapi.amap.com/maps?v=2.0&key=589433826c74f3006808d6da8a8c44af&plugin=AMap.Walking,AMap.Geocoder"></script>
+  <!-- ↑ 替换为你的高德 JS API Key -->
+
+  <script>
+    const API_BASE = 'https://你的服务名.你的用户名.workers.dev'; // ← 替换
+
+    const map = new AMap.Map('map', {
+      center: [113.324, 22.8095],
+      zoom: 17,
+      mapStyle: 'amap://styles/light',
+    });
+
+    let allPOI = {};
+    let currentMarkers = [];
+    let walking = null;
+    let selectedCat = '全部';
+
+    AMap.plugin('AMap.Walking', () => { walking = new AMap.Walking({ map, panel: null }); });
+
+    // ===== 加载POI =====
+    async function loadPOI() {
+      try {
+        const resp = await fetch(API_BASE + '/api/poi/all');
+        const json = await resp.json();
+        allPOI = json.data;
+        renderMarkers();
+        renderCatFilter();
+      } catch(e) { console.error('加载POI失败:', e); }
+    }
+
+    // ===== 渲染标记 =====
+    function renderMarkers() {
+      currentMarkers.forEach(m => m.setMap(null));
+      currentMarkers = [];
+      const catColors = { '校门':'#722ed1','教学楼':'#1677ff','实训楼':'#13c2c2','行政':'#fa8c16',
+        '宿舍':'#eb2f96','食堂':'#f5222d','运动':'#52c41a','生活':'#faad14','地标':'#2f54eb','报告厅':'#1890ff' };
+      for (const [name, poi] of Object.entries(allPOI)) {
+        if (selectedCat !== '全部' && poi.cat !== selectedCat) continue;
+        const marker = new AMap.Marker({
+          position: [poi.lng, poi.lat],
+          title: name,
+          label: { content: name.length > 6 ? name.substring(0,5)+'..' : name, direction: 'top', offset: [0, -5],
+            style: { fontSize: '10px', color: '#333', background: 'rgba(255,255,255,0.85)', padding: '1px 4px', borderRadius: '3px' } }
+        });
+        marker.on('click', () => {
+          document.getElementById('origin-input').value = name;
+          if (!document.getElementById('dest-input').value) document.getElementById('dest-input').focus();
+        });
+        marker.setMap(map);
+        currentMarkers.push(marker);
+      }
+    }
+
+    // ===== 分类筛选 =====
+    function renderCatFilter() {
+      const cats = ['全部', ...new Set(Object.values(allPOI).map(p => p.cat))];
+      document.getElementById('cat-filter').innerHTML = cats.map(c =>
+        `<div class="cat-chip${c===selectedCat?' active':''}" onclick="filterCat('${c}')">${c}</div>`
+      ).join('');
+    }
+
+    function filterCat(cat) {
+      selectedCat = cat;
+      renderMarkers();
+      renderCatFilter();
+    }
+
+    // ===== 路线规划 =====
+    async function doRoute() {
+      const rawOrigin = document.getElementById('origin-input').value.trim();
+      const rawDest = document.getElementById('dest-input').value.trim();
+      if (!rawOrigin || !rawDest) { alert('请输入起点和终点'); return; }
+
+      // 解析POI名→坐标
+      const originPOI = await searchPOI(rawOrigin);
+      const destPOI = await searchPOI(rawDest);
+      if (!originPOI) { alert('未找到起点：「'+rawOrigin+'」，请尝试其他名称'); return; }
+      if (!destPOI) { alert('未找到终点：「'+rawDest+'」，请尝试其他名称'); return; }
+
+      const oCoord = originPOI.lng + ',' + originPOI.lat;
+      const dCoord = destPOI.lng + ',' + destPOI.lat;
+
+      // 调路线API
+      try {
+        const resp = await fetch(API_BASE + '/api/route?origin=' + oCoord + '&dest=' + dCoord);
+        const json = await resp.json();
+        if (!json.success) { alert(json.msg); return; }
+
+        const d = json.data;
+        document.getElementById('route-summary').innerHTML =
+          `从 <b>${originPOI.name}</b> 到 <b>${destPOI.name}</b><br>总距离: ${(d.distance/1000).toFixed(2)}公里 &nbsp; 步行约 ${Math.ceil(d.duration/60)}分钟`;
+
+        let html = '';
+        d.steps.forEach((s, i) => {
+          html += `<div class="step"><div class="step-num">${i+1}</div><div class="step-info"><div class="step-instruction">${s.instruction}</div><div class="step-meta">${s.distance}米`;
+          if (s.road) html += ` &nbsp; ${s.road}`;
+          html += `</div></div></div>`;
+        });
+        document.getElementById('steps').innerHTML = html;
+        document.getElementById('panel').classList.add('show');
+
+        // 地图画路线
+        if (walking) walking.search([originPOI.lng, originPOI.lat], [destPOI.lng, destPOI.lat]);
+        map.setFitView(null, false, [200, 200, document.getElementById('panel').offsetHeight + 50, 50]);
+
+      } catch(e) { alert('路线查询失败: ' + e.message); }
+    }
+
+    async function searchPOI(keyword) {
+      try {
+        const resp = await fetch(API_BASE + '/api/poi/search?keyword=' + encodeURIComponent(keyword));
+        const json = await resp.json();
+        return json.data && json.data.length > 0 ? json.data[0] : null;
+      } catch(e) { return null; }
+    }
+
+    function closePanel() { document.getElementById('panel').classList.remove('show'); }
+    function closePOIList() { document.getElementById('poi-list').classList.remove('show'); }
+
+    // ===== URL参数支持 =====
+    const params = new URLSearchParams(location.search);
+    const urlOrigin = params.get('origin');
+    const urlDest = params.get('dest');
+    if (urlOrigin) document.getElementById('origin-input').value = decodeURIComponent(urlOrigin);
+    if (urlDest) document.getElementById('dest-input').value = decodeURIComponent(urlDest);
+
+    // 监听回车
+    document.getElementById('origin-input').addEventListener('keydown', e => { if (e.key==='Enter') doRoute(); });
+    document.getElementById('dest-input').addEventListener('keydown', e => { if (e.key==='Enter') doRoute(); });
+
+    loadPOI();
+    if (urlOrigin && urlDest) setTimeout(doRoute, 1500); // 等POI加载完
+  </script>
+</body>
+</html>
